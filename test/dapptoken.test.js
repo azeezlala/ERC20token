@@ -49,4 +49,46 @@ contract("DappToken", (account) => {
             assert.equal(ownerBalance.toNumber(), 750000, "deduct amount from owner");
         }
     })
+    it("should approves tokens for delegated transfer", async () => {
+        try {
+            let approve = await instance.approve.call(account[1], 100) //call does not write to the blockchain in this case it should fail
+            let success = await approve
+            assert.equal(success, true, "it return true")
+            assert.fail()
+        } catch (err) {
+            let token = await instance.approve(account[1], 100, {from:account[0]})
+            let receipt = await token
+            assert.equal(receipt.logs.length, 1, "trigger one event")
+            assert.equal(receipt.logs[0].event, 'Approval', "should be the 'Transfer' event")
+            assert.equal(receipt.logs[0].args._owner, account[0], 'sender')
+            assert.equal(receipt.logs[0].args._spender, account[1], 'from')
+            //assert.equal(receipt.logs[0].args._value, 250000,'sent amount')
+            let allowance = await instance.allowance(account[0], account[1])
+            let allow = await allowance
+            assert.equal(allow.toNumber(), 100, 'store the allowance for delegated transfer')
+        }
+    })
+    it('should handle delegated token transfer', async () => {
+        try {
+            fromAccount = account[2]
+            toAccount = account[3]
+            spendingAccount = account[4]
+            let transfer = await instance.transfer(fromAccount, 100, {from: account[0]})
+            let res = await transfer
+            let receipt = await instance.approve(spendingAccount, 10, {from: fromAccount})
+            let res2 = await receipt
+            let payload = await instance.transferFrom(fromAccount, toAccount, 999, {from: spendingAccount})
+            let result = await payload
+            assert.fail()
+        } catch (e) {
+            try {
+                assert(e.message.indexOf('revert') >= 0, "cannot transfer value larger than balance")
+                let payload = await instance.transferFrom(fromAccount, toAccount, 20, {from: spendingAccount})
+                let result = await payload
+                assert.fail()
+            } catch (e) {
+                assert(e.message.indexOf('revert') >= 0, "cannot transfer value larger than approved amount")
+            }
+        }
+    });
 })
